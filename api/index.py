@@ -12,7 +12,7 @@ TOKEN = "8500888325:AAFL7F1D1jKex7sC6wpeI6hcDaw41A2gKmo"
 ADMIN_CHAT_ID = 1581506880
 
 # URL de Vercel (¡IMPORTANTE! Cámbiala después de desplegar)
-VERCEL_URL = "https://TU_PROYECTO.vercel.app"
+VERCEL_URL = "https://telegram-bot-delta-orpin.vercel.app"
 # --- END CONFIGURATION ---
 
 # Configura logging
