@@ -1,3 +1,5 @@
 python-telegram-bot
 fastapi
 uvicorn
+requests
+python-dotenv
