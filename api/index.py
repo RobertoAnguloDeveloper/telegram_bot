@@ -2,7 +2,8 @@
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from fastapi import FastAPI, Request
+# Import BackgroundTasks
+from fastapi import FastAPI, Request, BackgroundTasks 
 
 # Import our new modules. The 'from .' makes it a relative import.
 from . import config
@@ -35,21 +36,32 @@ application.add_handler(MessageHandler(
 # --- 3. FastAPI App Setup (Controller Layer) ---
 app = FastAPI()
 
+# --- THIS IS THE UPDATED FUNCTION ---
 @app.post("/")
-async def handle_update(request: Request):
-    """Main webhook endpoint for Telegram updates."""
+async def handle_update(request: Request, background_tasks: BackgroundTasks):
+    """
+    Main webhook endpoint.
+    It receives an update from Telegram, adds the processing of that 
+    update to BackgroundTasks, and returns "ok" immediately.
+    """
     try:
+        # We must initialize the app on each request for serverless
         await application.initialize()
         data = await request.json()
         update = Update.de_json(data, application.bot)
         
-        # This one line passes control to the Service layer
-        await application.process_update(update)
+        # This is the crucial change:
+        # Instead of awaiting the long-running task, we add it
+        # to the background worker.
+        # FastAPI will await the coroutine for us.
+        background_tasks.add_task(application.process_update, update=update)
         
+        # Return "ok" to Telegram immediately
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Error processing update: {e}")
-        return {"status": "error"}
+        logger.error(f"Error in handle_update: {e}")
+        # Even on error, we must return a 200 to Telegram
+        return {"status": "error", "message": str(e)}
 
 @app.get("/set_webhook")
 async def set_webhook():
