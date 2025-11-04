@@ -58,7 +58,7 @@ async def correct_grammar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = requests.post(
             config.GRAMMAR_ENDPOINT_URL, 
             json=payload, 
-            timeout=25 # Set a 25-second timeout
+            timeout=9 # Set a 25-second timeout
         )
         
         # 3. Handle the response
