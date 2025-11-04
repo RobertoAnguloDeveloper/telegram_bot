@@ -1,6 +1,6 @@
 # api/bot_services.py
 import logging
-import requests
+import httpx  # <-- Import httpx instead of requests
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -8,6 +8,8 @@ from telegram.ext import ContextTypes
 from . import config
 
 logger = logging.getLogger(__name__)
+
+# --- start and notify_admin functions (NO CHANGE) ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
@@ -36,53 +38,64 @@ async def notify_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Failed to send message to {admin_id}: {e}")
         await update.message.reply_text(f"Error: No se pudo enviar el mensaje al admin.")
 
+# --- THIS IS THE UPDATED FUNCTION ---
+
 async def correct_grammar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handles a text message, sends it to the grammar API, and returns the correction.
-    This replaces the old 'echo' function.
+    This version uses httpx for non-blocking async requests.
     """
     user_text = update.message.text
     chat_id = update.effective_chat.id
     logger.info(f"Received text from {chat_id} for correction.")
 
-    # Show a "typing..." status in Telegram to show work is being done
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
     try:
-        # --- VCSM: Call the External Service ---
+        # --- VCSM: Call the External Service (Asynchronously) ---
         
-        # 1. Prepare the JSON payload for the "Grammar Fix" API
+        # 1. Prepare the JSON payload
         payload = {"text": user_text}
         
-        # 2. Call the endpoint URL from our config
-        response = requests.post(
-            config.GRAMMAR_ENDPOINT_URL, 
-            json=payload, 
-            timeout=9 # Set a 25-second timeout
-        )
-        
-        # 3. Handle the response
-        if response.status_code == 200:
-            # Success: Get the corrected text
-            corrected_text = response.json().get("correctedText")
-            if corrected_text:
-                await update.message.reply_text(corrected_text)
-            else:
-                raise Exception("API returned an empty or invalid response.")
-        else:
-            # Error: Pass the error from the grammar API back to the user
-            error_msg = response.json().get("error", response.text)
-            logger.error(f"Grammar API Error: {error_msg}")
-            await update.message.reply_text(f"Error al corregir: {error_msg}")
+        # 2. Define a 9-second timeout
+        timeout = httpx.Timeout(9.0, connect=5.0)
 
-    except requests.exceptions.Timeout:
+        # 3. Use an AsyncClient to make the request
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                config.GRAMMAR_ENDPOINT_URL,
+                json=payload
+            )
+
+        # 4. Handle the response (non-blocking)
+        # Raise an exception for 4xx/5xx errors
+        response.raise_for_status() 
+        
+        data = response.json()
+        corrected_text = data.get("correctedText")
+
+        if corrected_text:
+            await update.message.reply_text(corrected_text)
+        else:
+            raise Exception("API returned an empty or invalid response.")
+
+    except httpx.TimeoutException:
         logger.error(f"HTTP Request to {config.GRAMMAR_ENDPOINT_URL} timed out.")
         await update.message.reply_text("Error: El servicio de corrección tardó mucho en responder. Inténtalo de nuevo.")
-    except requests.exceptions.RequestException as e:
-        # Handle network-level errors (e.g., connection error)
+    except httpx.RequestError as e:
+        # Handle network-level errors (connection error, DNS, etc.)
         logger.error(f"HTTP Request failed: {e}")
         await update.message.reply_text("Error: No se pudo conectar con el servicio de corrección.")
+    except httpx.HTTPStatusError as e:
+        # Handle 4xx/5xx errors from the grammar API
+        try:
+            # Try to get the JSON error message from the API
+            error_msg = e.response.json().get("error", e.response.text)
+        except Exception:
+            error_msg = e.response.text
+        logger.error(f"Grammar API Error ({e.response.status_code}): {error_msg}")
+        await update.message.reply_text(f"Error al corregir: {error_msg}")
     except Exception as e:
-        # Handle other errors (JSON parsing, etc.)
+        # Handle all other errors (JSON parsing, RuntimeError, etc.)
         logger.error(f"General error in correct_grammar: {e}")
         await update.message.reply_text(f"Ha ocurrido un error inesperado: {e}")
