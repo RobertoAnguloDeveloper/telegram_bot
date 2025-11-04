@@ -1,7 +1,5 @@
-# requirements.txt
 python-telegram-bot
 fastapi
 uvicorn
-requests  # You can remove this if you want
-httpx     # <-- Add this line
+httpx
 python-dotenv
