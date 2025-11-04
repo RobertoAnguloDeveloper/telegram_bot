@@ -57,8 +57,9 @@ async def correct_grammar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 1. Prepare the JSON payload
         payload = {"text": user_text}
         
-        # 2. Define a 9-second timeout
-        timeout = httpx.Timeout(9.0, connect=5.0)
+        # 2. Define a 25-second timeout (Increased from 9.0)
+        #    This helps handle Vercel cold starts from the other service.
+        timeout = httpx.Timeout(25.0, connect=5.0)
 
         # 3. Use an AsyncClient to make the request
         async with httpx.AsyncClient(timeout=timeout) as client:
